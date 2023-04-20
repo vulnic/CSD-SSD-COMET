@@ -1,6 +1,6 @@
 import torch
 from torchvision import transforms
-from torchvision.transforms import Normalize, ToTensor
+from torchvision.transforms import Normalize, ToTensor, ColorJitter, Pad, RandomResizedCrop, RandomHorizontalFlip
 import cv2
 import numpy as np
 import types
@@ -414,6 +414,35 @@ class PhotometricDistort(object):
         im, boxes, labels = distort(im, boxes, labels)
         return self.rand_light_noise(im, boxes, labels)
 
+class RandomLightingNoiseTorch(object):
+    def __init__(self):
+        self.perms = ([0, 1, 2], [0, 2, 1],
+                      [1, 0, 2], [1, 2, 0],
+                      [2, 0, 1], [2, 1, 0])
+
+    def __call__(self, image, boxes=None, labels=None):
+        if random.randint(2):
+            swap = self.perms[random.randint(len(self.perms))]
+            image = image[swap,:,:] # shuffle channels, assume (3,H,W)
+        return image, boxes, labels
+
+class SSDTorchAugmentation(object):
+    def __init__(self, size=300, mean=(104, 117, 123), std=(1,1,1)):
+        self.mean = mean
+        self.std  = std
+        self.size = size
+        self.augment = Compose([
+            ToAbsoluteCoords(), # doesn't affect image
+            ColorJitter(),
+            RandomLightingNoiseTorch(),
+            Pad(),
+            RandomResizedCrop(),
+            RandomHorizontalFlip(),
+            SSDNormalize(self.mean,self.std)
+        ])
+
+    def __call__(self, img, boxes, labels):
+        return self.augment(img, boxes, labels)
 
 class SSDAugmentation(object):
     def __init__(self, size=300, mean=(104, 117, 123), std=(1,1,1)):

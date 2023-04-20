@@ -1,6 +1,5 @@
-cd "/mnt/c/Users/vlade813/Desktop/School/Masters/Spring 2023/Deep Learning/CSD-SSD-COMET"
 python train_ssd.py --dataset "VOC0712_300" \
-                    --dataset_root "/mnt/c/Users/vlade813/Desktop/School/Masters/Spring 2023/Deep Learning/Final Project/" \
+                    --dataset_root $1 \
                     --batch_size 50 \
                     --num_workers 4 \
                     --lr 1.5e-3 \
