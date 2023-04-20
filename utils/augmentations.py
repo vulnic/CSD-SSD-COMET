@@ -1,5 +1,6 @@
 import torch
 from torchvision import transforms
+from torchvision.transforms import Normalize, ToTensor
 import cv2
 import numpy as np
 import types
@@ -200,9 +201,9 @@ class ToCV2Image(object):
         return tensor.cpu().numpy().astype(np.float32).transpose((1, 2, 0)), boxes, labels
 
 
-class ToTensor(object):
-    def __call__(self, cvimage, boxes=None, labels=None):
-        return torch.from_numpy(cvimage.astype(np.float32)).permute(2, 0, 1), boxes, labels
+# class ToTensor(object):
+#     def __call__(self, cvimage, boxes=None, labels=None):
+#         return torch.from_numpy(cvimage.astype(np.float32)).permute(2, 0, 1), boxes, labels
 
 
 class RandomSampleCrop(object):
@@ -372,6 +373,23 @@ class SwapChannels(object):
         image = image[:, :, self.swaps]
         return image
 
+class SSDNormalize(object):
+    def __init__(self,mean=(0,0,0),std=(1,1,1)):
+        self.mean = np.asarray(mean,dtype=np.float32)
+        self.std  = np.asarray(std, dtype=np.float32)
+        # self.normalize = Normalize(self.mean,self.std)
+        # self.toTensor = ToTensor()
+    
+    def __call__(self, image, boxes, labels):
+        # Also can do:
+        # image = image-self.mean
+        image = (image-self.mean)/self.std
+        # image = np.moveaxis(image,[0, 1, 2], [1,2,0])
+        # image = self.toTensor(image)
+        # image = self.normalize(image)
+        # image = image.to_numpy()
+        return image, boxes, labels
+
 
 class PhotometricDistort(object):
     def __init__(self):
@@ -398,8 +416,9 @@ class PhotometricDistort(object):
 
 
 class SSDAugmentation(object):
-    def __init__(self, size=300, mean=(104, 117, 123)):
+    def __init__(self, size=300, mean=(104, 117, 123), std=(1,1,1)):
         self.mean = mean
+        self.std  = std
         self.size = size
         self.augment = Compose([
             ConvertFromInts(),
@@ -410,7 +429,8 @@ class SSDAugmentation(object):
             RandomMirror(),
             ToPercentCoords(),
             Resize(self.size),
-            SubtractMeans(self.mean)
+            # SubtractMeans(self.mean),
+            SSDNormalize(self.mean,self.std)
         ])
 
     def __call__(self, img, boxes, labels):

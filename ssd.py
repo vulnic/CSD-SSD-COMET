@@ -46,9 +46,12 @@ class SSD(nn.Module):
         self.loc = nn.ModuleList(head[0])
         self.conf = nn.ModuleList(head[1])
 
-        if phase == 'test':
-            self.softmax = nn.Softmax(dim=-1)
-            self.detect = Detect(num_classes, 0, 200, 0.01, 0.45)
+        self.test_softmax = nn.Softmax(dim=-1)
+        self.test_detect = Detect().apply # num_classes, bkg_label=0, top_k=200, conf_thresh=0.01, nms_thresh=0.45
+
+    def set_phase(self, phase):
+        assert phase in ['test','train']
+        self.phase = phase
 
     def forward(self, x):
         """Applies network layers and ops on input image(s) x.
@@ -99,19 +102,33 @@ class SSD(nn.Module):
         loc = torch.cat([o.view(o.size(0), -1) for o in loc], 1)
         conf = torch.cat([o.view(o.size(0), -1) for o in conf], 1)
         if self.phase == "test":
-            output = self.detect(
+            output = self.test_detect(
                 loc.view(loc.size(0), -1, 4),                   # loc preds
-                self.softmax(conf.view(conf.size(0), -1,
+                self.test_softmax(conf.view(conf.size(0), -1,
                              self.num_classes)),                # conf preds
-                self.priors.type(type(x.data))                  # default boxes
+                self.priors.type(type(x.data)),                 # default boxes,
+                self.num_classes, # num_classes=self.num_classes, 
+                0,                # background_label=0, 
+                200,              # top_k=200, 
+                0.01,             # conf_thresh=0.01, 
+                0.45,             # nms_thresh=0.45, 
+                [0.1,0.2]         # variance=[0.1,0.2]
             )
+            return output
         else:
-            output = (
+            train_output = (
                 loc.view(loc.size(0), -1, 4),
                 conf.view(conf.size(0), -1, self.num_classes),
                 self.priors
             )
-        return output
+            # test_output = self.test_detect(
+            #     loc.view(loc.size(0), -1, 4),                   # loc preds
+            #     self.test_softmax(conf.view(conf.size(0), -1,
+            #                  self.num_classes)),                # conf preds
+            #     self.priors.type(type(x.data))                  # default boxes
+            # )
+            return train_output#, test_output
+        raise Exception("Should not reach here")
 
     def load_weights(self, base_file):
         other, ext = os.path.splitext(base_file)

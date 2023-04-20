@@ -32,50 +32,55 @@ else:
 def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
 
+# MUST remove this parser to perform eval when training
 
-parser = argparse.ArgumentParser(
-    description='Single Shot MultiBox Detector Evaluation')
-parser.add_argument('--trained_model', default='weights/ssd300_COCO_120000.pth',
-                    type=str, help='Trained state_dict file path to open')
-# parser.add_argument('--trained_model',
-#                     default='weights/ssd300_mAP_77.43_v2.pth', type=str,
-#                     help='Trained state_dict file path to open')
-parser.add_argument('--save_folder', default='eval/', type=str,
-                    help='File path to save results')
-parser.add_argument('--confidence_threshold', default=0.01, type=float,
-                    help='Detection confidence threshold')
-parser.add_argument('--top_k', default=5, type=int,
-                    help='Further restrict the number of predictions to parse')
-parser.add_argument('--cuda', default=True, type=str2bool,
-                    help='Use cuda to train model')
-parser.add_argument('--voc_root', default='/home/soo/data/VOCdevkit/',
-                    help='Location of VOC root directory')
-parser.add_argument('--cleanup', default=True, type=str2bool,
-                    help='Cleanup and remove results files following eval')
+# parser.add_argument('--trained_model', default='weights/ssd300_COCO_120000.pth',
+#                     type=str, help='Trained state_dict file path to open')
+# parser.add_argument('--save_folder', default='eval/', type=str,
+#                     help='File path to save results')
+# parser.add_argument('--confidence_threshold', default=0.01, type=float,
+#                     help='Detection confidence threshold')
+# parser.add_argument('--top_k', default=5, type=int,
+#                     help='Further restrict the number of predictions to parse')
+# parser.add_argument('--cuda', default=True, type=str2bool,
+#                     help='Use cuda to train model')
+# parser.add_argument('--voc_root', default='/home/soo/data/VOCdevkit/',
+#                     help='Location of VOC root directory')
+# parser.add_argument('--cleanup', default=True, type=str2bool,
+#                     help='Cleanup and remove results files following eval')
 
-args = parser.parse_args()
+# Removed unused "args"
+arg_dict = {#"trained_model":'weights/ssd300_COCO_120000.pth',
+        "save_folder":'eval/',
+        #"confidence_threshold":0.01,
+        #"top_k":5,
+        "cuda":True,
+        "voc_root":"/mnt/c/Users/vlade813/Desktop/School/Masters/Spring 2023/Deep Learning/Final Project",
+        #"cleanup":True
+        }
 
-if not os.path.exists(args.save_folder):
-    os.mkdir(args.save_folder)
+if not os.path.exists(arg_dict['save_folder']):
+    os.mkdir(arg_dict['save_folder'])
 
 if torch.cuda.is_available():
-    if args.cuda:
+    if arg_dict['cuda']:
         torch.set_default_tensor_type('torch.cuda.FloatTensor')
-    if not args.cuda:
+    if not arg_dict['cuda']:
         print("WARNING: It looks like you have a CUDA device, but aren't using \
-              CUDA.  Run with --cuda for optimal eval speed.")
+            CUDA.  Run with --cuda for optimal eval speed.")
         torch.set_default_tensor_type('torch.FloatTensor')
 else:
     torch.set_default_tensor_type('torch.FloatTensor')
 
-annopath = os.path.join(args.voc_root, 'VOC2007', 'Annotations', '%s.xml')
-imgpath = os.path.join(args.voc_root, 'VOC2007', 'JPEGImages', '%s.jpg')
-imgsetpath = os.path.join(args.voc_root, 'VOC2007', 'ImageSets',
-                          'Main', '{:s}.txt')
+annopath = os.path.join(arg_dict['voc_root'], 'VOC2007', 'Annotations', '%s.xml')
+imgpath = os.path.join(arg_dict['voc_root'], 'VOC2007', 'JPEGImages', '%s.jpg')
+imgsetpath = os.path.join(arg_dict['voc_root'], 'VOC2007', 'ImageSets',
+                        'Main', '{:s}.txt')
 YEAR = '2007'
-devkit_path = args.voc_root + 'VOC' + YEAR
+devkit_path = arg_dict['voc_root'] + 'VOC' + YEAR
 dataset_mean = (104, 117, 123)
-set_type = 'test'
+set_type = 'val'
+
 
 
 class Timer(object):
@@ -145,12 +150,12 @@ def get_voc_results_file_template(image_set, cls):
     return path
 
 
-def write_voc_results_file(all_boxes, dataset):
+def write_voc_results_file(all_boxes, dataset_idxs):
     for cls_ind, cls in enumerate(labelmap):
-        print('Writing {:s} VOC results file'.format(cls))
+        # print('Writing {:s} VOC results file'.format(cls))
         filename = get_voc_results_file_template(set_type, cls)
         with open(filename, 'wt') as f:
-            for im_ind, index in enumerate(dataset.ids):
+            for im_ind, index in enumerate(dataset_idxs):
                 dets = all_boxes[cls_ind+1][im_ind]
                 if dets == []:
                     continue
@@ -167,7 +172,7 @@ def do_python_eval(output_dir='output', use_07=True):
     aps = []
     # The PASCAL VOC metric changed in 2010
     use_07_metric = use_07
-    print('VOC07 metric? ' + ('Yes' if use_07_metric else 'No'))
+    # print('VOC07 metric? ' + ('Yes' if use_07_metric else 'No'))
     if not os.path.isdir(output_dir):
         os.mkdir(output_dir)
     for i, cls in enumerate(labelmap):
@@ -176,21 +181,25 @@ def do_python_eval(output_dir='output', use_07=True):
            filename, annopath, imgsetpath.format(set_type), cls, cachedir,
            ovthresh=0.5, use_07_metric=use_07_metric)
         aps += [ap]
-        print('AP for {} = {:.4f}'.format(cls, ap))
+        # print('AP for {} = {:.4f}'.format(cls, ap))
+        # print('AP for {} = {:.4f}'.format(cls, ap))
+        # print("output file: {}".format(os.path.join(output_dir, cls + '_pr.pkl')))
         with open(os.path.join(output_dir, cls + '_pr.pkl'), 'wb') as f:
             pickle.dump({'rec': rec, 'prec': prec, 'ap': ap}, f)
-    print('Mean AP = {:.4f}'.format(np.mean(aps)))
-    print('~~~~~~~~')
-    print('Results:')
-    for ap in aps:
-        print('{:.3f}'.format(ap))
-    print('{:.3f}'.format(np.mean(aps)))
-    print('~~~~~~~~')
-    print('')
-    print('--------------------------------------------------------------')
-    print('Results computed with the **unofficial** Python eval code.')
-    print('Results should be very close to the official MATLAB eval code.')
-    print('--------------------------------------------------------------')
+    # print('Mean AP = {:.4f}'.format(np.mean(aps)))
+    # print('~~~~~~~~')
+    # print('Results:')
+    # for ap in aps:
+    #     print('{:.3f}'.format(ap))
+    # print('{:.3f}'.format(np.mean(aps)))
+    # print('~~~~~~~~')
+    # print('')
+    # print('--------------------------------------------------------------')
+    # print('Results computed with the **unofficial** Python eval code.')
+    # print('Results should be very close to the official MATLAB eval code.')
+    # print('--------------------------------------------------------------')
+
+    return aps
 
 
 def voc_ap(rec, prec, use_07_metric=True):
@@ -363,7 +372,7 @@ cachedir: Directory for caching the annotations
     return rec, prec, ap
 
 
-def test_net(save_folder, net, cuda, dataset, transform, top_k,
+def test_net(net, dataset, cuda=None, save_folder=None,  transform=None, top_k=None,
              im_size=300, thresh=0.05):
     num_images = len(dataset)
     # all detections are collected into:
@@ -381,7 +390,7 @@ def test_net(save_folder, net, cuda, dataset, transform, top_k,
         im, gt, h, w = dataset.pull_item(i)
 
         x = Variable(im.unsqueeze(0))
-        if args.cuda:
+        if arg_dict['cuda']:
             x = x.cuda()
         _t['im_detect'].tic()
         detections = net(x).data
@@ -412,15 +421,40 @@ def test_net(save_folder, net, cuda, dataset, transform, top_k,
         pickle.dump(all_boxes, f, pickle.HIGHEST_PROTOCOL)
 
     print('Evaluating detections')
-    evaluate_detections(all_boxes, output_dir, dataset)
+    evaluate_detections(all_boxes, output_dir, dataset=dataset)
 
 
-def evaluate_detections(box_list, output_dir, dataset):
-    write_voc_results_file(box_list, dataset)
-    do_python_eval(output_dir)
+def evaluate_detections(box_list, output_dir, dataset=None, dataset_idxs=None):
+    assert (dataset is not None) or (dataset_idxs is not None), "one must be used!"
+    write_voc_results_file(box_list, dataset_idxs if dataset_idxs else dataset.ids)
+    return do_python_eval(output_dir)
+    # write_voc_results_file(box_list, dataset.ids)
+    # do_python_eval(output_dir)
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(
+    description='Single Shot MultiBox Detector Evaluation')
+    parser.add_argument('--trained_model', default='weights/ssd300_COCO_120000.pth',
+                        type=str, help='Trained state_dict file path to open')
+    # parser.add_argument('--trained_model',
+    #                     default='weights/ssd300_mAP_77.43_v2.pth', type=str,
+    #                     help='Trained state_dict file path to open')
+    parser.add_argument('--save_folder', default='eval/', type=str,
+                        help='File path to save results')
+    parser.add_argument('--confidence_threshold', default=0.01, type=float,
+                        help='Detection confidence threshold')
+    parser.add_argument('--top_k', default=5, type=int,
+                        help='Further restrict the number of predictions to parse')
+    parser.add_argument('--cuda', default=True, type=str2bool,
+                        help='Use cuda to train model')
+    parser.add_argument('--voc_root', default='/home/soo/data/VOCdevkit/',
+                        help='Location of VOC root directory')
+    parser.add_argument('--cleanup', default=True, type=str2bool,
+                        help='Cleanup and remove results files following eval')
+
+    args = parser.parse_args()
+
     # load net
     num_classes = len(labelmap) + 1                      # +1 for background
     net = build_ssd('test', 300, num_classes)            # initialize SSD
