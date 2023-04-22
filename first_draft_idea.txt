@@ -1,0 +1,43 @@
+import torch
+print (torch.__version__)
+
+input = torch.tensor ([2.0, 10.0])
+
+p1 = torch.tensor ([1.0], requires_grad = True)   # separate-parameters version
+p2 = torch.tensor ([1.0], requires_grad = True)   # separate-parameters version
+
+o  = p1 * input + p2 * input**2   # run "model" -- vector output
+loss = o.sum()                    # scalar loss
+loss
+
+loss.backward()
+p1.grad
+p2.grad
+
+######################################################################
+
+p = torch.tensor ([1.0], requires_grad = True)   # shared-parameter version
+
+o = p * input + p * input**2   # run shared-parameter "model"
+loss = o.sum()
+loss   # loss is the same
+
+loss.backward()
+p.grad   # grad gets accumulated for both halves of "model"
+optim.step()
+
+######################################################################
+
+p.grad = None
+
+o1 = p * input           # run shared-parameter "model" in two pieces -- first half
+o2 = o1 + p * input**2   # second half
+loss = o2.sum()
+loss   # loss is the same
+
+grad2 = torch.autograd.grad (loss, o1)       # gradient of second half of "model" with respect to o1
+grad2    # grad2, as expected, is not a scalar
+p.grad   # doesn't populate p.grad
+grad1 = torch.autograd.grad (o1, p, grad2)   # gradient of the first half of "model" with respect to p
+grad1    # same as p1.grad
+
