@@ -22,7 +22,7 @@ from data import *
 # from data.coco import COCODetection, COCOAnnotationTransform, COCO_CLASSES, COCO_ROOT, get_label_map
 # from data.config import *
 
-from eval import get_output_dir, evaluate_detections
+from eval_new import get_output_dir, evaluate_detections
 from tqdm import tqdm
 
 def str2bool(v):
