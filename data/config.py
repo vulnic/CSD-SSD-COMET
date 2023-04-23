@@ -2,8 +2,8 @@
 import os.path
 
 # gets home dir cross platform
-HOME = os.path.expanduser("~")
-
+path2 = '~\\CSD-SSD-COMET'
+HOME = os.path.expanduser(path2)
 # for making bounding boxes pretty
 COLORS = ((255, 0, 0, 128), (0, 255, 0, 128), (0, 0, 255, 128),
           (0, 255, 255, 128), (255, 0, 255, 128), (255, 255, 0, 128))

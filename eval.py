@@ -30,12 +30,19 @@ else:
 
 
 def str2bool(v):
-    return v.lower() in ("yes", "true", "t", "1")
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
 
 
 parser = argparse.ArgumentParser(
     description='Single Shot MultiBox Detector Evaluation')
-parser.add_argument('--trained_model', default='weights/ssd300_COCO_120000.pth',
+parser.add_argument('--trained_model', default='weights/ssd300_COCO_119999.pth',
                     type=str, help='Trained state_dict file path to open')
 # parser.add_argument('--trained_model',
 #                     default='weights/ssd300_mAP_77.43_v2.pth', type=str,
@@ -48,7 +55,7 @@ parser.add_argument('--top_k', default=5, type=int,
                     help='Further restrict the number of predictions to parse')
 parser.add_argument('--cuda', default=True, type=str2bool,
                     help='Use cuda to train model')
-parser.add_argument('--voc_root', default='/home/soo/data/VOCdevkit/',
+parser.add_argument('--voc_root', default='data\\VOCdevkit',
                     help='Location of VOC root directory')
 parser.add_argument('--cleanup', default=True, type=str2bool,
                     help='Cleanup and remove results files following eval')
@@ -261,7 +268,7 @@ cachedir: Directory for caching the annotations
         os.mkdir(cachedir)
     cachefile = os.path.join(cachedir, 'annots.pkl')
     # read list of images
-    with open(imagesetfile, 'r') as f:
+    with open('data/VOCdevkit/VOC2007/ImageSets/Main/test.txt', 'r') as f:
         lines = f.readlines()
     imagenames = [x.strip() for x in lines]
     if not os.path.isfile(cachefile):

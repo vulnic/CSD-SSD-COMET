@@ -2,7 +2,7 @@ import torch
 from torch.autograd import Function
 from ..box_utils import decode, nms
 from data import voc300 as cfg
-from data import voc512 as cfg
+#from data import voc512 as cfg
 
 
 class Detect(Function):
@@ -11,7 +11,18 @@ class Detect(Function):
     scores and threshold to a top_k number of output predictions for both
     confidence score and locations.
     """
-    def __init__(self, num_classes, bkg_label, top_k, conf_thresh, nms_thresh):
+#    def __init__(self, num_classes, bkg_label, top_k, conf_thresh, nms_thresh):
+#        self.num_classes = num_classes
+#        self.background_label = bkg_label
+#        self.top_k = top_k
+#        # Parameters used in nms.
+#        self.nms_thresh = nms_thresh
+#        if nms_thresh <= 0:
+#            raise ValueError('nms_threshold must be non negative.')
+#        self.conf_thresh = conf_thresh
+#        self.variance = [0.1, 0.2] #cfg['variance']
+    @staticmethod
+    def forward(self, num_classes, bkg_label, top_k, conf_thresh, nms_thresh, loc_data, conf_data, prior_data):
         self.num_classes = num_classes
         self.background_label = bkg_label
         self.top_k = top_k
@@ -20,9 +31,8 @@ class Detect(Function):
         if nms_thresh <= 0:
             raise ValueError('nms_threshold must be non negative.')
         self.conf_thresh = conf_thresh
-        self.variance = [0.1, 0.2] #cfg['variance']
-
-    def forward(self, loc_data, conf_data, prior_data):
+        self.variance = cfg['variance']
+    # PyTorch1.5.0 support new-style autograd function
         """
         Args:
             loc_data: (tensor) Loc preds from loc layers

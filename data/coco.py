@@ -8,7 +8,7 @@ import torchvision.transforms as transforms
 import cv2
 import numpy as np
 
-COCO_ROOT = osp.join(HOME, 'semi_detection/ssd_semi_good/data/coco/')
+COCO_ROOT = 'C:\Masters\CSD-SSD-COMET\data\coco'
 IMAGES = 'images'
 ANNOTATIONS = 'annotations'
 COCO_API = 'PythonAPI'
