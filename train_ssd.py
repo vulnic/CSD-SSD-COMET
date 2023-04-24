@@ -213,11 +213,11 @@ def train():
 
     import pytorch_warmup as warmup 
     # lr_scheduler1 = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=args.gamma)
-    sched_list = []
-    for step in cfg['lr_steps']:
-        lr_scheduler1 = torch.optim.lr_scheduler.StepLR(optimizer, step_size=step, gamma=args.gamma)
-        sched_list.append(lr_scheduler1)
-    warmup_scheduler = warmup.LinearWarmup(optimizer, warmup_period=args.warmup_period) # UntunedLinearWarmup for Adam
+    # sched_list = []
+    # for step in cfg['lr_steps']:
+    #     lr_scheduler1 = torch.optim.lr_scheduler.StepLR(optimizer, step_size=step, gamma=args.gamma)
+    #     sched_list.append(lr_scheduler1)
+    # warmup_scheduler = warmup.LinearWarmup(optimizer, warmup_period=args.warmup_period) # UntunedLinearWarmup for Adam
     
     # create batch iterator
     batch_iterator = iter(train_data_loader)
@@ -260,10 +260,10 @@ def train():
         loss = loss_l + loss_c
         loss.backward()
         optimizer.step()
-        with warmup_scheduler.dampening():
-            for lr_scheduler in sched_list:
-                lr_scheduler.step()
-            # lr_scheduler2.step()
+        # with warmup_scheduler.dampening():
+        #     for lr_scheduler in sched_list:
+        #         lr_scheduler.step()
+        #     # lr_scheduler2.step()
         t1 = time.time()
         loc_loss += loss_l.data#[0]
         conf_loss += loss_c.data#[0]
@@ -302,86 +302,86 @@ def get_lr(optimizer):
     for param_group in optimizer.param_groups:
         return param_group['lr']
 
-def val(net, criterion, val_data_loader, val_dataset, model_name, save_folder, labelmap):
-    batch_iterator = iter(val_data_loader)
-    net.eval()
-    loc_loss = 0
-    conf_loss = 0
-    average_ap = []
-    # total_objects = 0
-    # total_correct = 0
-    # for i,(images, targets) in enumerate(tqdm(batch_iterator)):
-    with torch.no_grad():
-        for i in tqdm(range(len(val_data_loader))):
-            try:
-                images, targets = next(batch_iterator)
-            except StopIteration:
-                batch_iterator = iter(val_data_loader)
-                images, targets = next(batch_iterator)
+# def val(net, criterion, val_data_loader, val_dataset, model_name, save_folder, labelmap):
+#     batch_iterator = iter(val_data_loader)
+#     net.eval()
+#     loc_loss = 0
+#     conf_loss = 0
+#     average_ap = []
+#     # total_objects = 0
+#     # total_correct = 0
+#     # for i,(images, targets) in enumerate(tqdm(batch_iterator)):
+#     with torch.no_grad():
+#         for i in tqdm(range(len(val_data_loader))):
+#             try:
+#                 images, targets = next(batch_iterator)
+#             except StopIteration:
+#                 batch_iterator = iter(val_data_loader)
+#                 images, targets = next(batch_iterator)
 
-            if args.cuda:
-                images = Variable(images.cuda())
-                targets = [Variable(ann.cuda(), volatile=True) for ann in targets]
-            else:
-                images = Variable(images)
-                targets = [Variable(ann, volatile=True) for ann in targets]
-            # forward
+#             if args.cuda:
+#                 images = Variable(images.cuda())
+#                 targets = [Variable(ann.cuda(), volatile=True) for ann in targets]
+#             else:
+#                 images = Variable(images)
+#                 targets = [Variable(ann, volatile=True) for ann in targets]
+#             # forward
         
-            t0 = time.time()
-            net.module.set_phase('train')
-            train_output = net(images)
-            # backprop
-            loss_l, loss_c = criterion(train_output, targets)
-            loss = loss_l + loss_c
-            loc_loss += loss_l.data#[0]
-            conf_loss += loss_c.data#[0]
+#             t0 = time.time()
+#             net.module.set_phase('train')
+#             train_output = net(images)
+#             # backprop
+#             loss_l, loss_c = criterion(train_output, targets)
+#             loss = loss_l + loss_c
+#             loc_loss += loss_l.data#[0]
+#             conf_loss += loss_c.data#[0]
 
-            # print("out:",train_output[0].shape,train_output[1].shape,train_output[2].shape)
-            # print("targets:{},{}".format(len(targets),targets[0].shape))
+#             # print("out:",train_output[0].shape,train_output[1].shape,train_output[2].shape)
+#             # print("targets:{},{}".format(len(targets),targets[0].shape))
 
-            _, _, w, h = images.shape
-            net.module.set_phase('test')
-            test_output = net(images) # SLOWWWW
-            detections = test_output.data
-            all_boxes = [[[] for _ in range(len(val_dataset))]
-                             for _ in range(len(labelmap)+1)]
-            for j in range(1, detections.size(1)):
-                dets = detections[0, j, :]
-                mask = dets[:, 0].gt(0.).expand(5, dets.size(0)).t()
-                dets = torch.masked_select(dets, mask).view(-1, 5)
-                if dets.dim() == 0:
-                    continue
-                boxes = dets[:, 1:]
-                boxes[:, 0] *= w
-                boxes[:, 2] *= w
-                boxes[:, 1] *= h
-                boxes[:, 3] *= h
-                scores = dets[:, 0].cpu().numpy()
-                cls_dets = np.hstack((boxes.cpu().numpy(),
-                                    scores[:, np.newaxis])).astype(np.float32,
-                                                                    copy=False)
-                all_boxes[j][i] = cls_dets
+#             _, _, w, h = images.shape
+#             net.module.set_phase('test')
+#             test_output = net(images) # SLOWWWW
+#             detections = test_output.data
+#             all_boxes = [[[] for _ in range(len(val_dataset))]
+#                              for _ in range(len(labelmap)+1)]
+#             for j in range(1, detections.size(1)):
+#                 dets = detections[0, j, :]
+#                 mask = dets[:, 0].gt(0.).expand(5, dets.size(0)).t()
+#                 dets = torch.masked_select(dets, mask).view(-1, 5)
+#                 if dets.dim() == 0:
+#                     continue
+#                 boxes = dets[:, 1:]
+#                 boxes[:, 0] *= w
+#                 boxes[:, 2] *= w
+#                 boxes[:, 1] *= h
+#                 boxes[:, 3] *= h
+#                 scores = dets[:, 0].cpu().numpy()
+#                 cls_dets = np.hstack((boxes.cpu().numpy(),
+#                                     scores[:, np.newaxis])).astype(np.float32,
+#                                                                     copy=False)
+#                 all_boxes[j][i] = cls_dets
 
-            # correct = (out == targets).sum().item()
-            # accuracy = correct / targets.size(0)
-            t1 = time.time()
-            # total_objects += targets.size(0)
-            # total_correct += correct
+#             # correct = (out == targets).sum().item()
+#             # accuracy = correct / targets.size(0)
+#             t1 = time.time()
+#             # total_objects += targets.size(0)
+#             # total_correct += correct
             
-            output_dir = get_output_dir(model_name, f'{save_folder}/val')
-            class_aps = evaluate_detections(all_boxes, output_dir, dataset_idxs=val_dataset.ids) # NOT that slow!!!
-            average_ap.append(class_aps)
+#             output_dir = get_output_dir(model_name, f'{save_folder}/val')
+#             class_aps = evaluate_detections(all_boxes, output_dir, dataset_idxs=val_dataset.ids) # NOT that slow!!!
+#             average_ap.append(class_aps)
 
-            # make sure to average across the class, and then together
+#             # make sure to average across the class, and then together
     
-    print("Val Loss: {:.4f} || Val Loc Loss: {:.4f} || Val Conf Loss: {:.4f} || Val acc: {:.4f} ||".format(loc_loss, 
-                                                                                                           conf_loss,
-                                                                                                           loss.data,
-                                                                                                           0),end=' ') # average_ap/len(batch_iterator)
-    print('timer: %.4f sec.' % (t1 - t0))
+#     print("Val Loss: {:.4f} || Val Loc Loss: {:.4f} || Val Conf Loss: {:.4f} || Val acc: {:.4f} ||".format(loc_loss, 
+#                                                                                                            conf_loss,
+#                                                                                                            loss.data,
+#                                                                                                            0),end=' ') # average_ap/len(batch_iterator)
+#     print('timer: %.4f sec.' % (t1 - t0))
 
-    net.module.set_phase('train')
-    # print(f"Final Accuracy = {total_correct/total_objects}")
+#     net.module.set_phase('train')
+#     # print(f"Final Accuracy = {total_correct/total_objects}")
 
 def adjust_learning_rate(optimizer, gamma, step):
     """Sets the learning rate to the initial LR decayed by 10 at every
