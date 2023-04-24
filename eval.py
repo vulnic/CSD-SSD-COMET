@@ -448,6 +448,7 @@ if __name__ == '__main__':
     args.save_folder = os.path.join(args.save_folder,"{}")
     for weight_path in list_of_weights:
         print(f"Loading {weight_path} weights for evaluation...")
+        t00 = time.time()
 
         filename = os.path.basename(weight_path).replace('.pth','')
         args.save_folder = args.save_folder.format(filename)
@@ -467,5 +468,7 @@ if __name__ == '__main__':
         test_net(args.save_folder, net, args.cuda, dataset,
                 BaseTransform(net.size, dataset_mean), args.top_k, 300,
                 thresh=args.confidence_threshold, output_filename=filename)
+        t11 = time.time()
+        print(f"Total elapsed time = {t11-t00}s")
 
 
