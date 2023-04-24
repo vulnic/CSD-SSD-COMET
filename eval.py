@@ -445,13 +445,13 @@ if __name__ == '__main__':
     else: 
         list_of_weights = [args.trained_model]
 
-    args.save_folder = os.path.join(args.save_folder,"{}")
+    # args.save_folder = os.path.join(args.save_folder,"{}")
     for weight_path in list_of_weights:
         print(f"Loading {weight_path} weights for evaluation...")
         t00 = time.time()
 
-        filename = os.path.basename(weight_path).replace('.pth','')
-        args.save_folder = args.save_folder.format(filename)
+        filename = os.path.basename(weight_path).replace('.pth','.txt')
+        # args.save_folder = args.save_folder.format(filename)
         num_classes = len(labelmap) + 1                      # +1 for background
         net = build_ssd('test', 300, num_classes)            # initialize SSD
         net.load_state_dict(torch.load(weight_path))
