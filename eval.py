@@ -39,6 +39,8 @@ def str2bool(v):
     else:
         raise argparse.ArgumentTypeError('Boolean value expected.')
 
+from data import VOC0712_MEANS, VOC0712_STD
+
 import warnings
 warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -459,14 +461,14 @@ if __name__ == '__main__':
         print('Finished loading model!')
         # load data
         dataset = VOCDetection(args.voc_root, [('2007', set_type)],
-                            BaseTransform(300, dataset_mean),
+                            BaseTransform(300, VOC0712_MEANS, VOC0712_STD),
                             VOCAnnotationTransform())
         if args.cuda:
             net = net.cuda()
             cudnn.benchmark = True
         # evaluation
         test_net(args.save_folder, net, args.cuda, dataset,
-                BaseTransform(net.size, dataset_mean), args.top_k, 300,
+                BaseTransform(net.size, VOC0712_MEANS, VOC0712_STD), args.top_k, 300,
                 thresh=args.confidence_threshold, output_filename=filename)
         t11 = time.time()
         print(f"Total elapsed time = {t11-t00}s")
