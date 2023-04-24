@@ -46,6 +46,7 @@ class SSD(nn.Module):
         self.loc = nn.ModuleList(head[0])
         self.conf = nn.ModuleList(head[1])
 
+        self.return_loc_conf = return_loc_conf
         if phase == 'test':
             self.softmax = nn.Softmax(dim=-1)
             self.detect = Detect().apply
@@ -117,7 +118,7 @@ class SSD(nn.Module):
                 conf.view(conf.size(0), -1, self.num_classes),
                 self.priors
             )
-        if return_loc_conf and self.phase != "test":
+        if self.return_loc_conf and self.phase != "test":
             return output, loc, conf, sources # features before loc/conf heads
         else:
             return output
