@@ -1,9 +1,10 @@
 from data import *
-from utils.augmentations import SSDAugmentation
+from utils.augmentations import SSDAugmentation, augment_bbox
 from layers.modules import MultiBoxLoss
 from ssd import build_ssd
 # from ssd_consistency import build_ssd_con
 from csd import build_ssd_con
+from comet import COMET
 import os
 import sys
 import time
@@ -106,13 +107,25 @@ def train():
 
     finish_flag = True
 
+    # prior = {
+    # "rotate":  0.4, 
+    # "shear":  0.05,
+    # "scale":  0.25,
+    # "translate": .4,
+    # "h-flip":  0.01,
+    # }
+
     prior = {
-    "rotate":  0.4, 
-    "shear":  0.05,
-    "scale":  0.25,
-    "translate": .4,
-    "h-flip":  0.01,
-    }
+                "rotate":1.0,
+                "shear":1.0,
+                "scale":1.0,
+                "h-translate":1.0,
+                "v-translate":1.0,
+                "h-flip":1.0,
+                "v-flip":1.0
+            }
+
+    cos_sim = torch.nn.CosineSimilarity()
 
     while(finish_flag):
 
@@ -145,7 +158,7 @@ def train():
             ssd_net.loc.apply(weights_init)
             ssd_net.conf.apply(weights_init)
 
-        optimizer = optim.SGD(ssd_net.parameters(), lr=args.lr, momentum=args.momentum,
+        optimizer1 = optim.SGD(ssd_net.parameters(), lr=args.lr, momentum=args.momentum,
                               weight_decay=args.weight_decay)
         criterion = MultiBoxLoss(cfg['num_classes'], 0.5, True, 0, True, 3, 0.5,
                                  False, args.cuda)
@@ -153,6 +166,7 @@ def train():
 
         optimizer2 = optim.SGD(comet_net.parameters(), lr=args.lr, momentum=args.momentum,
                               weight_decay=args.weight_decay)
+        
         # perturb_criterion = perturbation_loss() # might be cosine distance?
         #######################
         # build ssd + COMET END
@@ -201,6 +215,7 @@ def train():
 
 
         batch_iterator = iter(supervised_data_loader)
+        epoch_size = len(supervised_data_loader) // args.batch_size
 
         for iteration in range(args.start_iter, cfg['max_iter']):
             if args.visdom and iteration != 0 and (iteration % epoch_size == 0):
@@ -213,7 +228,8 @@ def train():
 
             if iteration in cfg['lr_steps']:
                 step_index += 1
-                adjust_learning_rate(optimizer, args.gamma, step_index)
+                adjust_learning_rate(optimizer1, args.gamma, step_index)
+                adjust_learning_rate(optimizer2, args.gamma, step_index)
 
             try:
                 images, targets, semis = next(batch_iterator)
@@ -239,11 +255,17 @@ def train():
             # forward
             t0 = time.time()
 
-            aug_images = comet_net(images)
+            aug_images, coords, inv_mat = comet_net(images)
             out, loc, conf, features = ssd_net(images)
             _, loc_aug, conf_aug, features_aug = ssd_net(aug_images)
 
-            aug_params = comet_net.last_used_params
+            inv_locs = []
+            for loc_a in loc_aug:
+                # invert bounding boxes
+                inv_loc = augment_bbox(loc_a,inv_mat)
+                inv_locs.append(inv_loc)
+
+            inv_locs = torch.FloatTensor(inv_locs)
 
             # supervised losses START
             #########################
@@ -310,7 +332,7 @@ def train():
                 loc_sampled = loc_mask_sample[mask_loc_index].view(-1, 4)
 
                 conf_mask_sample_aug = conf_aug.clone()
-                loc_mask_sample_aug = loc_aug.clone()
+                loc_mask_sample_aug = inv_locs.clone()
                 conf_sampled_aug = conf_mask_sample_aug[mask_conf_index].view(-1, 21)
                 loc_sampled_aug = loc_mask_sample_aug[mask_loc_index].view(-1, 4)
 
@@ -323,7 +345,8 @@ def train():
                 consistency_conf_loss = consistency_conf_loss_a + consistency_conf_loss_b
 
                 ## LOC LOSS
-                consistency_loc_loss_x = torch.mean(torch.pow(loc_sampled[:, 0] + loc_sampled_aug[:, 0], exponent=2))
+                # After bounding box reversal, all values should be the same
+                consistency_loc_loss_x = torch.mean(torch.pow(loc_sampled[:, 0] - loc_sampled_aug[:, 0], exponent=2))
                 consistency_loc_loss_y = torch.mean(torch.pow(loc_sampled[:, 1] - loc_sampled_aug[:, 1], exponent=2))
                 consistency_loc_loss_w = torch.mean(torch.pow(loc_sampled[:, 2] - loc_sampled_aug[:, 2], exponent=2))
                 consistency_loc_loss_h = torch.mean(torch.pow(loc_sampled[:, 3] - loc_sampled_aug[:, 3], exponent=2))
@@ -332,11 +355,8 @@ def train():
                     consistency_loc_loss_x + consistency_loc_loss_y + consistency_loc_loss_w + consistency_loc_loss_h,
                     4)
 
-                # inverted bounding boxes
-                # inv_loc_aug = invert_aug(loc_sampled_aug, aug_params) # aug_params are the 4 weight values used to augment the image
-                # inv_loc_aug
-
-
+                # PERTURB LOSS
+                perturb_loss = 1 - cos_sim(features,features_aug)
 
             else:
                 consistency_conf_loss = Variable(torch.cuda.FloatTensor([0]))
@@ -358,13 +378,13 @@ def train():
                     loss1 = loss_l + loss_c + consistency_loss
 
             # loss2 is for COMET
-            # if(supervised_flag ==1):
-            #     loss2 = loss_l + loss_c + consistency_loss + perturb_loss
-            # else:
-            #     if(len(sup_image_index)==0):
-            #         loss2 = consistency_loss + perturb_loss
-            #     else:
-            #         loss2 = loss_l + loss_c + consistency_loss + perturb_loss
+            if(supervised_flag ==1):
+                loss2 = loss_l + loss_c + consistency_loss + perturb_loss
+            else:
+                if(len(sup_image_index)==0):
+                    loss2 = consistency_loss + perturb_loss
+                else:
+                    loss2 = loss_l + loss_c + consistency_loss + perturb_loss
             
             ########################    
             # consistency losses END
@@ -379,7 +399,7 @@ def train():
             if(perturb_loss.data>0):
                 # update COMET weights only
                 optimizer2.zero_grad()
-                perturb_loss2.backward()
+                loss2.backward()
                 optimizer2.step()
 
             t1 = time.time()
@@ -393,11 +413,11 @@ def train():
 
             if iteration % 10 == 0:
                 print('timer: %.4f sec.' % (t1 - t0))
-                print('iter ' + repr(iteration) + ' || Loss: %.4f || consistency_loss : %.4f ||' % (loss.data, consistency_loss.data), end=' ')
-                print('loss: %.4f , loss_c: %.4f , loss_l: %.4f , loss_con: %.4f, lr : %.4f, super_len : %d\n' % (loss.data, loss_c.data, loss_l.data, consistency_loss.data,float(optimizer.param_groups[0]['lr']),len(sup_image_index)))
+                print('iter ' + repr(iteration) + ' || Loss1: %.4f || consistency_loss : %.4f ||' % (loss1.data, consistency_loss.data), end=' ')
+                print('loss2: %.4f , loss_c: %.4f , loss_l: %.4f , loss_con: %.4f, loss_pert: %.4f, lr : %.4f, super_len : %d\n' % (loss2.data, loss_c.data, loss_l.data, consistency_loss.data, perturb_loss.data,float(optimizer1.param_groups[0]['lr']),len(sup_image_index)))
 
 
-            if(float(loss)>100):
+            if(float(loss1)>100 or float(loss2)>100):
                 break
 
             if args.visdom:
@@ -409,7 +429,7 @@ def train():
                 torch.save(ssd_net.state_dict(), os.path.join(args.save_folder,'ssd300_COCO_' + repr(iteration+1) + '.pth'))
         # torch.save(ssd_net.state_dict(), args.save_folder + '' + args.dataset + '.pth')
         print('-------------------------------\n')
-        print(loss.data)
+        print(loss2.data)
         print('-------------------------------')
 
         if((iteration +1) ==cfg['max_iter']):

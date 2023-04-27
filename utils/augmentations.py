@@ -6,6 +6,59 @@ import numpy as np
 import types
 from numpy import random
 
+def augment_bbox(bbox,transform_mat,return_aug_polygon=False):
+    # augment_bbox() can take in bbox OR coords
+    #  - for augmenting a bbox, use bbox
+    #  - for inverting an augmented bbox, use coords
+    
+    # augment bbox
+    # - - - - - - 
+    
+    if bbox.shape == (4,):
+        # augment the bbox
+        x1,y1,x2,y2 = bbox
+        upper_left  = np.asarray([x1,y1,1],dtype=np.float32)
+        upper_right = np.asarray([x2,y1,1],dtype=np.float32)
+        lower_left  = np.asarray([x1,y2,1],dtype=np.float32)
+        lower_right = np.asarray([x2,y2,1],dtype=np.float32)
+    elif bbox.shape == (5,2) or bbox.shape == (4,2):
+        # reverse the bbox's augmentation
+        # bbox is [ul, ur, lr, ll, ul] or missing last "ul"
+        upper_left  = np.asarray(np.append(bbox[0],1),dtype=np.float32)
+        upper_right = np.asarray(np.append(bbox[1],1),dtype=np.float32)
+        lower_right = np.asarray(np.append(bbox[2],1),dtype=np.float32)
+        lower_left  = np.asarray(np.append(bbox[3],1),dtype=np.float32)
+    else:
+        raise Exception("bbox shape is not compatible", bbox.shape)
+    
+    # print(upper_left, upper_left.shape, bbox[0])
+    new_ul = np.matmul(transform_mat,upper_left)[:2]
+    new_ur = np.matmul(transform_mat,upper_right)[:2]
+    new_ll = np.matmul(transform_mat,lower_left)[:2]
+    new_lr = np.matmul(transform_mat,lower_right)[:2]
+    
+    coords = [new_ul, new_ur, new_lr, new_ll]
+    five_coords = coords + [new_ul] # append for closer loop
+    # xs,ys = zip(*five_coords)
+    # new_coords = 
+
+    # create surrounding bbox
+    # - - - - - - - - - - - -
+    npcoords = np.asarray(five_coords,dtype=np.float32)
+    all_x_coords = npcoords[:,0]
+    all_y_coords = npcoords[:,1]
+    
+    full_x1 = np.min(all_x_coords)
+    full_x2 = np.max(all_x_coords)
+    full_y1 = np.min(all_y_coords)
+    full_y2 = np.max(all_y_coords)
+    
+    aug_bbox = np.asarray([full_x1, full_y1, full_x2, full_y2], dtype=np.float32)
+    
+    if return_aug_polygon:
+        return aug_bbox,npcoords
+    
+    return aug_bbox
 
 def intersect(box_a, box_b):
     max_xy = np.minimum(box_a[:, 2:], box_b[2:])
