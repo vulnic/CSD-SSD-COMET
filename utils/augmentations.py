@@ -6,7 +6,7 @@ import numpy as np
 import types
 from numpy import random
 
-def augment_bbox(bbox,transform_mat,return_aug_polygon=False):
+def np_augment_bbox(bbox,transform_mat,return_aug_polygon=False):
     # augment_bbox() can take in bbox OR coords
     #  - for augmenting a bbox, use bbox
     #  - for inverting an augmented bbox, use coords
@@ -57,6 +57,136 @@ def augment_bbox(bbox,transform_mat,return_aug_polygon=False):
     
     if return_aug_polygon:
         return aug_bbox,npcoords
+    
+    return aug_bbox
+
+def augment_bboxes(bboxes,mat,cuda=False):
+    
+    # bboxes.shape == (num_batches,num_boxes,4)   = (nB,nBb,4)
+    # bboxes.shape == (num_batches,num_boxes,4,2) = (nB,nBb,4,2)
+    # bboxes.shape == (num_batches,num_boxes,5,2) = (nB,nBb,5,2)
+
+    if bboxes.shape[2:] == (4,):
+        # augment bbox with "mat"
+
+        xA = torch.FloatTensor([[1,0,0,0],
+                                [0,1,0,0],
+                                [0,1,0,0],
+                                [1,0,0,0]])
+        
+        yA = torch.FloatTensor([[0,0,1,0],
+                                [0,0,1,0],
+                                [0,0,0,1],
+                                [0,0,0,1]])
+
+        ones = torch.ones(bboxes.shape + (1,)) # (nB,nBb,4,1)
+
+        if 'cuda' in str(bboxes.device):
+            xA   = xA.clone().cuda()
+            yA   = yA.clone().cuda()
+            ones = ones.clone().cuda()
+            mat  = mat.clone().cuda()
+
+        x_vals = torch.matmul(bboxes,xA)          # (nB,nBb,4)
+        x_vals = x_vals.view(bboxes.shape + (1,)) # (nB,nBb,4,1)
+        y_vals = torch.matmul(bboxes,yA)          # (nB,nBb,4)
+        y_vals = y_vals.view(bboxes.shape + (1,)) # (nB,nBb,4,1)
+
+        coords     = torch.cat([x_vals,y_vals,ones],axis=3) # (nB,nBb,4,3)
+        aug_coords = torch.matmul(coords, mat)              # (nB,nBb,4,3)
+        aug_coords = coords[:,:,:,:-1] # remove ones column # (nB,nBb,4,2)
+        
+        # new_x_vals = coords[:,:,:,0].view(bboxes.shape + (1,)) # (nB,nBb,4,1)
+        # new_y_vals = coords[:,:,:,1].view(bboxes.shape + (1,)) # (nB,nBb,4,1)
+        x_max = torch.max(aug_coords[:,:,:,0],axis=2)[0] # (nB,nBb)
+        x_min = torch.min(aug_coords[:,:,:,0],axis=2)[0] # (nB,nBb)
+        y_max = torch.max(aug_coords[:,:,:,1],axis=2)[0] # (nB,nBb)
+        y_min = torch.min(aug_coords[:,:,:,1],axis=2)[0] # (nB,nBb)
+
+        # this should be x1,y1,x2,y2
+        aug_bboxes = torch.stack([x_min,y_min,x_max,y_max],axis=2) # (nB,nBb,4)
+
+        # ul = x1,y1
+        # ur = x2,y1
+        # lr = x2,y2
+        # ll = x1,y2
+    
+    # elif bboxes.shape[2:] == (4,2) or \
+    #      bboxes.shape[2:] == (5,2):
+
+    #      if bboxes.shape[2:] == (5,2):
+    #         bboxes = bboxes[:,:,:4]
+
+    return aug_bboxes
+
+
+def augment_bbox(bbox,transform_mat,return_aug_polygon=False):
+    # augment_bbox() can take in bbox OR coords
+    #  - for augmenting a bbox, use bbox
+    #  - for inverting an augmented bbox, use coords
+    
+    # augment bbox
+    # - - - - - - 
+    
+    if bbox.shape == (4,):
+    # if bbox.shape[2:] == (4,):  
+        # augment the bbox
+        x1,y1,x2,y2 = bbox
+        #[[0,1,0,0],
+        # [0,1,0,0],
+        # [0,0,0,1],
+        # [0,0,0,1]]
+
+        #[[1,0,0,0],
+        # [0,0,1,0],
+        # [1,0,0,0],
+        # [0,0,1,0]]
+
+        # ones = torch.ones(bbox.shape[:2].append(1))
+
+        upper_left  = torch.FloatTensor([x1,y1,1])
+        upper_right = torch.FloatTensor([x2,y1,1])
+        lower_left  = torch.FloatTensor([x1,y2,1])
+        lower_right = torch.FloatTensor([x2,y2,1])
+
+
+
+    elif bbox.shape == (5,2) or bbox.shape == (4,2):
+        # reverse the bbox's augmentation
+        # bbox is [ul, ur, lr, ll, ul] or missing last "ul"
+        upper_left  = torch.FloatTensor(np.append(bbox[0],1))
+        upper_right = torch.FloatTensor(np.append(bbox[1],1))
+        lower_right = torch.FloatTensor(np.append(bbox[2],1))
+        lower_left  = torch.FloatTensor(np.append(bbox[3],1))
+    else:
+        raise Exception("bbox shape is not compatible", bbox.shape)
+    
+    # print(upper_left, upper_left.shape, bbox[0])
+    new_ul = torch.matmul(transform_mat,upper_left)[:2]
+    new_ur = torch.matmul(transform_mat,upper_right)[:2]
+    new_ll = torch.matmul(transform_mat,lower_left)[:2]
+    new_lr = torch.matmul(transform_mat,lower_right)[:2]
+    
+    coords = [new_ul, new_ur, new_lr, new_ll]
+    five_coords = coords + [new_ul] # append for closer loop
+    # xs,ys = zip(*five_coords)
+    # new_coords = 
+
+    # create surrounding bbox
+    # - - - - - - - - - - - -
+    torchcoords = torch.stack(five_coords)
+    all_x_coords = torchcoords[:,0]
+    all_y_coords = torchcoords[:,1]
+    
+    full_x1 = torch.min(all_x_coords)
+    full_x2 = torch.max(all_x_coords)
+    full_y1 = torch.min(all_y_coords)
+    full_y2 = torch.max(all_y_coords)
+    
+    aug_bbox = torch.FloatTensor([full_x1, full_y1, full_x2, full_y2])
+    
+    if return_aug_polygon:
+        return aug_bbox,torchcoords
     
     return aug_bbox
 

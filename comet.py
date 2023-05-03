@@ -2,8 +2,9 @@ import torch
 import numpy as np
 
 from torch.nn.parameter import Parameter
-import torchvision.transforms.functional as TF
 from torch.nn.functional import tanh
+import torchvision.transforms.functional as TF
+from torchvision.transforms import InterpolationMode
 
 from utils.augmentations import augment_bbox
 
@@ -17,12 +18,13 @@ from utils.augmentations import augment_bbox
 # }
 
 
-class COMET(torch.nn.module):
+class COMET(torch.nn.Module):
     def __init__(self, device=None, dytpe=None, prior=None):
         # factory_kwargs = {'device': device, 'dtype': dtype}
         if prior:
             assert "rotate"      in prior.keys()
-            assert "shear"       in prior.keys()
+            assert "h-shear"     in prior.keys()
+            assert "v-shear"     in prior.keys()
             assert "scale"       in prior.keys()
             assert "h-translate" in prior.keys()
             assert "v-translate" in prior.keys()
@@ -31,9 +33,10 @@ class COMET(torch.nn.module):
             self.prior = {k:torch.FloatTensor(v, device=device) for k,v in prior.items()}
         else:
             # default prior
-            prior = {
+            self.prior = {
                 "rotate":1.0,
-                "shear":1.0,
+                "h-shear":1.0,
+                "v-shear":1.0,
                 "scale":1.0,
                 "h-translate":1.0,
                 "v-translate":1.0,
@@ -41,15 +44,15 @@ class COMET(torch.nn.module):
                 "v-flip":1.0
             }
 
-        self.rotate_weight  = Parameter(torch.FloatTensor([0], device=device)) # Parameter(torch.empty((1,), **factory_kwargs)) 
-        self.h_shear_weight = Parameter(torch.FloatTensor([0], device=device)) # Parameter(torch.empty((1,), **factory_kwargs))
-        self.v_shear_weight = Parameter(torch.FloatTensor([0], device=device)) # Parameter(torch.empty((1,), **factory_kwargs))
-        self.scale_weight   = Parameter(torch.FloatTensor([0], device=device)) # Parameter(torch.empty((1,), **factory_kwargs))
-        self.h_translate_weight = Parameter(torch.FloatTensor([0], device=device)) # Parameter(torch.empty((1,), **factory_kwargs))
-        self.v_translate_weight = Parameter(torch.FloatTensor([0], device=device)) # Parameter(torch.empty((1,), **factory_kwargs))
-        self.h_flip_weight      = Parameter(torch.FloatTensor([0], device=device)) # Parameter(torch.empty((1,), **factory_kwargs))
-        self.v_flip_weight      = Parameter(torch.FloatTensor([0], device=device)) # Parameter(torch.empty((1,), **factory_kwargs))
-        super.__init__()
+        super(COMET,self).__init__()
+        self.rotate_weight  = Parameter(torch.FloatTensor([0]).cuda(),requires_grad=True) # Parameter(torch.empty((1,), **factory_kwargs)) 
+        self.h_shear_weight = Parameter(torch.FloatTensor([0]).cuda(),requires_grad=True) # Parameter(torch.empty((1,), **factory_kwargs))
+        self.v_shear_weight = Parameter(torch.FloatTensor([0]).cuda(),requires_grad=True) # Parameter(torch.empty((1,), **factory_kwargs))
+        self.scale_weight   = Parameter(torch.FloatTensor([0]).cuda(),requires_grad=True) # Parameter(torch.empty((1,), **factory_kwargs))
+        self.h_translate_weight = Parameter(torch.FloatTensor([0]).cuda(),requires_grad=True) # Parameter(torch.empty((1,), **factory_kwargs))
+        self.v_translate_weight = Parameter(torch.FloatTensor([0]).cuda(),requires_grad=True) # Parameter(torch.empty((1,), **factory_kwargs))
+        self.h_flip_weight      = Parameter(torch.FloatTensor([0]).cuda(),requires_grad=True) # Parameter(torch.empty((1,), **factory_kwargs))
+        self.v_flip_weight      = Parameter(torch.FloatTensor([0]).cuda(),requires_grad=True) # Parameter(torch.empty((1,), **factory_kwargs))
 
     def forward(self,x,boxes):
         h,w = x.size()[-2:] # should be (...,H,W)
@@ -106,24 +109,29 @@ class COMET(torch.nn.module):
                                                 inverted=True)
 
         # add row to mat
-        full_mat = np.array([mat[:3],mat[3:],[0,0,1]],dtype=np.float32)
-        inv_full_mat = np.array([inv_mat[:3],inv_mat[3:],[0,0,1]],dtype=np.float32)
+        full_mat     = torch.FloatTensor([mat[:3],mat[3:],[0,0,1]])
+        inv_full_mat = torch.FloatTensor([inv_mat[:3],inv_mat[3:],[0,0,1]])
 
         
-        assert (boxes[0].shape == (4,)), f"bounding box shape incorrect: boxes[0]={boxes[0]}"
-        new_coords = []
-        for box in boxes:
-            aug_box,coords = augment_bbox(box,full_mat,return_aug_polygon=True)
-            new_coords.append(coords)
+        # assert (boxes[0].shape == (4,)), "bounding box shape incorrect: boxes[0]={}".format(boxes[0])
+        
+        # for single_img_boxes in boxes:
+        #     new_coords = []
+        #     for box in single_img_boxes:
+        #         # augment every individual bounding box
+        #         aug_box,coords = augment_bbox(box,full_mat,return_aug_polygon=True)
+        #         new_coords.append(coords)
 
         x = TF.affine(x,
-                      angle=relative_rotate,
-                      translate=[h_translate, v_translate],
-                      scale=relative_scale,
-                      shear=[relative_h_shear,relative_v_shear],
-                      center=center)
+                      angle=relative_rotate.item(),
+                      translate=[h_translate.item(), v_translate.item()],
+                      scale=relative_scale.item(),
+                      shear=[relative_h_shear.item(),relative_v_shear.item()],
+                      center=center,
+                      interpolation=InterpolationMode.BILINEAR)
 
-        return x, np.array(new_coords,dtype=np.float32), inv_full_mat
+        # return x, torch.cat(new_coords,0), inv_full_mat
+        return x, inv_full_mat
 
     # def save_params(self,angle,translate,scale,shear):
     #     self.last_used_params = [angle,translate,scale,shear]

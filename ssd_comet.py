@@ -1,4 +1,6 @@
 from ssd import SSD, build_ssd
+import torch
+from utils.augmentations import augment_bboxes
 # prior = {
 # “rotate”: [0, 0.4], #[mean, std]
 # “shear”: [0, 0.05],
@@ -8,14 +10,16 @@ from ssd import SSD, build_ssd
 # }
 
 
-class COMET_SSD(nn.module):
-    def __init__(self,prior):
-        comet = COMET(prior)
-        ssd = build_ssd('train', cfg['min_dim'], cfg['num_classes'], return_loc_conf=True)
+class SSD_COMET(torch.nn.Module):
+    def __init__(self,comet_net,ssd_net):
         super().__init__()
-    def forward(self,x):
-        x_aug = comet(x)
-        aug_params = comet.last_used_params() # [angle,translate,scale,shear] := [float,List[float],float,float]
-        out, loc, conf = ssd(x)
-          _, loc_aug, conf_aug = ssd(x_aug)
-        return out, conf, conf_aug, loc, loc_aug, aug_params
+        self.comet_net = comet_net
+        self.ssd_net = ssd_net
+    def forward(self,images,boxes):
+      aug_images, inv_mat = self.comet_net(images, boxes)
+      out, loc, conf, features = self.ssd_net(images)
+      _, loc_aug, conf_aug, features_aug = self.ssd_net(aug_images)
+
+      inv_locs = augment_bboxes(loc_aug,inv_mat,cuda=True)
+
+      return out, inv_locs, loc, conf, features, loc_aug, conf_aug, features_aug

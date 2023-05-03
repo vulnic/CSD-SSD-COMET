@@ -177,6 +177,7 @@ def train():
 
         supervised_data_loader = data.DataLoader(supervised_dataset, supervised_batch,
                                                    num_workers=args.num_workers,
+                                                   generator=torch.Generator(device='cuda'),
                                                    shuffle=True, collate_fn=detection_collate,
                                                    pin_memory=True, drop_last=True)
 
@@ -205,6 +206,7 @@ def train():
                                                                                       MEANS))#, shuffle_flag=data_shuffle)
                 supervised_data_loader = data.DataLoader(supervised_dataset, supervised_batch,
                                                            num_workers=args.num_workers,
+                                                           generator=torch.Generator(device='cuda'),
                                                            shuffle=True, collate_fn=detection_collate,
                                                            pin_memory=True, drop_last=True)
                 batch_iterator = iter(supervised_data_loader)

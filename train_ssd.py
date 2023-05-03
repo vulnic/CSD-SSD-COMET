@@ -151,11 +151,12 @@ def train():
                                                          MEANS))
 
     ssd_net = build_ssd('train', cfg['min_dim'], cfg['num_classes'])
-    net = ssd_net
 
     if args.cuda:
         net = torch.nn.DataParallel(ssd_net)
         cudnn.benchmark = True
+    else:
+        net=ssd_net
 
     if args.resume:
         print('Resuming training, loading {}...'.format(args.resume))

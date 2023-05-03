@@ -5,6 +5,7 @@ from ssd import build_ssd
 # from ssd_consistency import build_ssd_con
 from csd import build_ssd_con
 from comet import COMET
+from ssd_comet import SSD_COMET
 import os
 import sys
 import time
@@ -154,14 +155,13 @@ def train():
         #########################
         ssd = build_ssd('train', cfg['min_dim'], cfg['num_classes'], return_loc_conf=True)
         comet = COMET(prior)
+        ssd_comet= SSD_COMET(comet,ssd)
 
         if args.cuda:
-            ssd_net = torch.nn.DataParallel(ssd)
-            comet_net = torch.nn.DataParallel(comet)
+            # ssd_net = torch.nn.DataParallel(ssd)
+            # comet_net = torch.nn.DataParallel(comet)
+            ssd_comet = torch.nn.DataParallel(ssd_comet)
             cudnn.benchmark = True
-        else:
-            ssd_net = ssd
-            comet_net = comet
 
         if args.resume:
             print('Resuming training, loading {}...'.format(args.resume))
@@ -172,8 +172,9 @@ def train():
             ssd.vgg.load_state_dict(vgg_weights)
 
         if args.cuda:
-            ssd_net = ssd_net.cuda()
-            comet_net = comet_net.cuda()
+            # ssd_net = ssd_net.cuda()
+            # comet_net = comet_net.cuda()
+            ssd_comet = ssd_comet.cuda()
 
         if not args.resume:
             print('Initializing weights...')
@@ -182,21 +183,24 @@ def train():
             ssd.loc.apply(weights_init)
             ssd.conf.apply(weights_init)
 
-        optimizer1 = optim.SGD(ssd_net.parameters(), lr=args.lr, momentum=args.momentum,
-                              weight_decay=args.weight_decay)
+        # optimizer1 = optim.SGD(ssd_net.parameters(), lr=args.lr, momentum=args.momentum,
+        #                       weight_decay=args.weight_decay)
+        # optimizer2 = optim.SGD(comet_net.parameters(), lr=args.lr, momentum=args.momentum,
+        #                       weight_decay=args.weight_decay)
+        optimizer1 = optim.SGD(ssd_comet.parameters(), lr=args.lr, momentum=args.momentum,
+                               weight_decay=args.weight_decay)
         criterion = MultiBoxLoss(cfg['num_classes'], 0.5, True, 0, True, 3, 0.5,
                                  False, args.cuda)
         conf_consistency_criterion = torch.nn.KLDivLoss(size_average=False, reduce=False).cuda()
 
-        optimizer2 = optim.SGD(comet_net.parameters(), lr=args.lr, momentum=args.momentum,
-                              weight_decay=args.weight_decay)
         
         # perturb_criterion = perturbation_loss() # might be cosine distance?
         #######################
         # build ssd + COMET END
 
-        ssd_net.train()
-        comet_net.train()
+        # ssd_net.train()
+        # comet_net.train()
+        ssd_comet.train()
         # loss counters
         loc_loss = 0
         conf_loss = 0
@@ -235,7 +239,7 @@ def train():
         supervised_data_loader = data.DataLoader(supervised_dataset, supervised_batch,
                                                    num_workers=args.num_workers,
                                                    shuffle=True, collate_fn=detection_collate,
-                                                   generator=torch.Generator(device='cuda' if args.cuda else 'cpu'),
+                                                   generator=torch.Generator(device='cuda'),
                                                    pin_memory=True, drop_last=True)
 
 
@@ -266,7 +270,7 @@ def train():
                 supervised_data_loader = data.DataLoader(supervised_dataset, supervised_batch,
                                                            num_workers=args.num_workers,
                                                            shuffle=True, collate_fn=detection_collate,
-                                                           generator=torch.Generator(device='cuda' if args.cuda else 'cpu'),
+                                                           generator=torch.Generator(device='cuda'),
                                                            pin_memory=True, drop_last=True)
                 batch_iterator = iter(supervised_data_loader)
                 images, targets, semis = next(batch_iterator)
@@ -278,18 +282,15 @@ def train():
             else:
                 images = Variable(images)
                 targets = [Variable(ann, volatile=True) for ann in targets]
-
-            # reset optimizer before forward
-            optimizer1.zero_grad()
-            optimizer2.zero_grad()
-            
             # forward
             t0 = time.time()
 
             boxes = [x[:,:4] for x in targets]
-            aug_images, inv_mat = comet_net(images, boxes)
-            out, loc, conf, features = ssd_net(images)
-            _, loc_aug, conf_aug, features_aug = ssd_net(aug_images)
+            # aug_images, inv_mat = comet_net(images, boxes)
+            # out, loc, conf, features = ssd_net(images)
+            # _, loc_aug, conf_aug, features_aug = ssd_net(aug_images)
+
+            out, inv_locs, loc, conf, features, loc_aug, conf_aug, features_aug = ssd_comet(images,boxes)
 
             # inv_locs = []
             # for bbox_batch in loc_aug:
@@ -301,7 +302,7 @@ def train():
             #     inv_locs.append(torch.stack(batched_inv_locs))
             # inv_locs = torch.stack(inv_locs).cuda()
 
-            inv_locs = augment_bboxes(loc_aug,inv_mat,cuda=args.cuda)
+            # inv_locs = augment_bboxes(loc_aug,inv_mat,cuda=True)
 
             # supervised losses START
             #########################
@@ -378,7 +379,7 @@ def train():
                 conf_sampled = conf_sampled + 1e-7
                 consistency_conf_loss_a = conf_consistency_criterion(conf_sampled.log(), conf_sampled_aug.detach()).sum(-1).mean()
                 consistency_conf_loss_b = conf_consistency_criterion(conf_sampled_aug.log(), conf_sampled.detach()).sum(-1).mean()
-                consistency_conf_loss = consistency_conf_loss_a + consistency_conf_loss_b
+                consistency_conf_loss = torch.div(consistency_conf_loss_a + consistency_conf_loss_b,2)
 
                 ## LOC LOSS
                 # After bounding box reversal, all values should be the same
@@ -398,7 +399,7 @@ def train():
                 consistency_conf_loss = Variable(torch.cuda.FloatTensor([0]))
                 consistency_loc_loss = Variable(torch.cuda.FloatTensor([0]))
 
-            consistency_loss = torch.div(consistency_conf_loss,2) + consistency_loc_loss
+            consistency_loss = consistency_conf_loss + consistency_loc_loss
 
             ramp_weight = rampweight(iteration)
             consistency_loss = torch.mul(consistency_loss, ramp_weight)
@@ -425,31 +426,27 @@ def train():
             ########################    
             # consistency losses END
 
-            if(loss1.data>0):
-                # update SSD weights only
-                # grad_loss1 = torch.ones_like(loss1)
-                # loss1_grad = torch.autograd.grad(loss1, ssd_net.parameters(), grad_outputs=grad_loss1, retain_graph=True)
-                # torch.autograd.backward(loss1_grad, ssd_net.parameters())
-                loss1.backward(retain_graph=True)
-                optimizer1.step()
+            # if(loss1.data>0):
+            #     # update SSD weights only
+            #     optimizer1.zero_grad()
+            #     loss1.backward()
+            #     optimizer1.step()
 
-            if(perturb_loss.data>0):
+            if(loss2.data>0):
                 # update COMET weights only
-                # grad_loss2 = torch.ones_like(loss2)
-                # loss2_grad = torch.autograd.grad(loss2, comet_net.parameters(), grad_outputs=grad_loss1, retain_graph=True)
-                # torch.autograd.backward(loss2_grad, comet_net.parameters())
-                perturb_loss.backward()
-                optimizer2.step()
+                # optimizer2.zero_grad()
                 optimizer1.zero_grad()
-                optimizer2.zero_grad()
+                loss2.backward(retain_graph=True)
+                optimizer1.step()
+                # optimizer2.step()
 
             t1 = time.time()
             if(len(sup_image_index)==0):
                 loss_l.data = Variable(torch.cuda.FloatTensor([0]))
                 loss_c.data = Variable(torch.cuda.FloatTensor([0]))
             else:
-                loc_loss = loc_loss + loss_l.data  # [0]
-                conf_loss = conf_loss + loss_c.data  # [0]
+                loc_loss += loss_l.data  # [0]
+                conf_loss += loss_c.data  # [0]
 
 
             if iteration % 10 == 0:
@@ -467,7 +464,7 @@ def train():
 
             if iteration != 0 and (iteration+1) % 40000 == 0:
                 print('Saving state, iter:', iteration)
-                torch.save(ssd_net.state_dict(), os.path.join(args.save_folder,'ssd300_COCO_' + repr(iteration+1) + '.pth'))
+                torch.save(ssd_comet.state_dict(), os.path.join(args.save_folder,'ssd300_COCO_' + repr(iteration+1) + '.pth'))
         # torch.save(ssd_net.state_dict(), args.save_folder + '' + args.dataset + '.pth')
         print('-------------------------------\n')
         print(loss2.data)
