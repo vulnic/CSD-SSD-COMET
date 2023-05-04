@@ -9,6 +9,13 @@ This repository is dockerized and can be pulled down as a container. Datasets ca
 #### prerequisites
 - Python 3.6
 - Pytorch 2.0.0
+- matplotlib
+- jupyterlab
+- seaborn
+- numpy
+- pandas
+- opencv-python
+- pytorch_warmup
 
 ## Supervised learning for SSD300 on VOC2007 dataset
 ```Shell
