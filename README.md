@@ -4,11 +4,13 @@
 By [Vladimir Leung & Anthony Mangio)
 
 ## Installation & Preparation
-This repository is dockerized and can be pulled down as a container. Datasets can be pulled down using scripts located CSD-SSD-COMET/data/scripts/. 
+This repository is dockerized and can be pulled down as a container. Datasets can be pulled down using scripts located CSD-SSD-COMET/data/scripts/. Network weights are saved in CSD-SSD-COMET/weights/. 
 
 #### prerequisites
 - Python 3.6
-- Pytorch 2.0.0
+- Pytorch 1.13.1
+- torchvision 0.14.1
+- torchaudio 0.13.1
 - matplotlib
 - jupyterlab
 - seaborn
@@ -31,3 +33,9 @@ python train_comet_ssd.py
 ```Shell
 python eval.py
 ```
+## SSD & COMET Model Locations
+
+ssd.py
+ssd_comet.py
+
+
