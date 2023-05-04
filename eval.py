@@ -49,7 +49,7 @@ parser = argparse.ArgumentParser(
     description='Single Shot MultiBox Detector Evaluation')
 parser.add_argument('--trained_model', default='weights/ssd300_COCO_119999.pth',
                     type=str, help='Trained state_dict file path to open')
-parser.add_argument('--all_weights', default=None,
+parser.add_argument('--all_weights', default='weights',
                     type=str, help='List of weights')
 # parser.add_argument('--trained_model',
 #                     default='weights/ssd300_mAP_77.43_v2.pth', type=str,
