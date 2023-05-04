@@ -58,3 +58,9 @@ To evaluate a folder of models, please run the bash file below. If you run into 
 python eval.py --all_weights <path_to_weights> \
                --voc_root ~/data
 ```
+## SSD & COMET Model Locations
+
+ssd.py
+ssd_comet.py
+
+
